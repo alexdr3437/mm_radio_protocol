@@ -1,0 +1,7 @@
+.vscode/
+keys/
+*.pem
+build/
+.west/
+.cache/
+

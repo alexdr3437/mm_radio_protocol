@@ -1,0 +1,60 @@
+&i2c0 {
+    compatible = "nordic,nrf-twim";
+    status = "okay";
+    // sda-pin = <26>;
+    // scl-pin = <27>;
+    clock-frequency = <100000>;
+    mysensor: mysensor@76{
+        compatible = "i2c-device";
+        reg = < 0x76>;
+        label = "PSensor";
+     };
+ };
+
+//&WDT {
+ //   status= "okay";
+//};
+
+ /{
+    buttons {
+        status = "okay";
+        compatible = "gpio-keys";
+        pwr0: pwr_0 {
+            label = "ADC power input";
+            gpios = <&gpio0 11 (GPIO_ACTIVE_HIGH)>;
+        };
+    };
+
+    aliases{
+        adcpwr = &pwr0;
+    };
+};
+
+
+&pinctrl { //moved rts from pin 5 to 12 so ADC can use pin 5
+	uart0_default: uart0_default {
+		group1 {
+			psels = <NRF_PSEL(UART_TX, 0, 6)>,
+				<NRF_PSEL(UART_RX, 0, 8)>,
+				<NRF_PSEL(UART_RTS, 0, 12)>,
+				<NRF_PSEL(UART_CTS, 0, 7)>;
+		};
+	};
+
+	uart0_sleep: uart0_sleep {
+		group1 {
+			psels = <NRF_PSEL(UART_TX, 0, 6)>,
+				<NRF_PSEL(UART_RX, 0, 8)>,
+				<NRF_PSEL(UART_RTS, 0, 12)>,
+				<NRF_PSEL(UART_CTS, 0, 7)>;
+			low-power-enable;
+		};
+	};
+
+};
+
+/ {
+   zephyr,user {
+      io-channels = <&adc 4>;
+   };
+};

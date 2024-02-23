@@ -1,0 +1,9 @@
+
+menu "Bluetooth Low Energy features"
+
+config MM_BLE_ENC_KEY
+	string "BLE encryption key"
+
+endmenu
+
+source "Kconfig.zephyr"
