@@ -1,15 +1,8 @@
 
-#ifndef MM_RADIO_H_
-#define MM_RADIO_H_
 
-#if defined(__cplusplus)
-extern "C" {
-#endif
+#ifndef __RADIO_H
+#define __RADIO_H
 
-int radio_init();
+void radio_init();
 
-#if defined(__cplusplus)
-}
-#endif
-
-#endif
+#endif // __RADIO_H
