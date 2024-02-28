@@ -6,11 +6,15 @@ LOG_MODULE_REGISTER(mm_radio_timer, LOG_LEVEL_DBG);
 
 #include <hal/nrf_radio.h>
 #include <nrfx.h>
+#include <nrfx_gpiote.h>
 #include <nrfx_ppi.h>
 #include <nrfx_timer.h>
 
-static nrf_ppi_channel_t timer_capture_ppi;
-static nrf_ppi_channel_t timer_start_ppi;
+#include "radio_timer.h"
+
+#define OUTPUT_PIN 14
+
+static nrf_ppi_channel_t ppi_channels[ 5 ];
 
 const nrfx_timer_t timer = {
 	.p_reg			  = NRF_TIMER2,
@@ -29,68 +33,108 @@ int radio_timer_init(void) {
 		.p_context			= NULL,
 	};
 
+	uint8_t out_channel;
+	rc = nrfx_gpiote_channel_alloc(&out_channel);
+	if (rc != NRFX_SUCCESS) {
+		LOG_ERR("Failed to allocate GPIOTE channel %08x", rc);
+		return -EINVAL;
+	}
+
+	const nrfx_gpiote_output_config_t output_config = {
+		.drive		   = NRF_GPIO_PIN_S0S1,
+		.input_connect = NRF_GPIO_PIN_INPUT_DISCONNECT,
+		.pull		   = NRF_GPIO_PIN_NOPULL,
+	};
+
+	const nrfx_gpiote_task_config_t task_config = {
+		.task_ch  = out_channel,
+		.polarity = NRF_GPIOTE_POLARITY_TOGGLE,
+		.init_val = NRF_GPIOTE_INITIAL_VALUE_HIGH,
+	};
+
+	rc = nrfx_gpiote_output_configure(OUTPUT_PIN, &output_config, &task_config);
+	if (rc != NRFX_SUCCESS) {
+		LOG_ERR("Failed to configure GPIOTE output");
+		return -EINVAL;
+	}
+
+	nrfx_gpiote_out_task_enable(OUTPUT_PIN);
+
 	rc = nrfx_timer_init(&timer, &timer_config, NULL);
 	if (rc != NRFX_SUCCESS) {
 		LOG_ERR("Failed to initialize timer %08x", rc);
-		return -1;
+		return -EINVAL;
 	}
 
-	rc = nrfx_ppi_channel_alloc(&timer_capture_ppi);
-	if (rc != NRFX_SUCCESS) {
-		LOG_ERR("Failed to allocate PPI channel");
-		return -1;
+	for (int i = 0; i < ARRAY_SIZE(ppi_channels); i++) {
+		rc = nrfx_ppi_channel_alloc(&ppi_channels[ i ]);
+		if (rc != NRFX_SUCCESS) {
+			LOG_ERR("Failed to allocate PPI channel");
+			return -EINVAL;
+		}
 	}
 
-	rc = nrfx_ppi_channel_alloc(&timer_start_ppi);
-	if (rc != NRFX_SUCCESS) {
-		LOG_ERR("Failed to allocate PPI channel");
-		return -1;
-	}
-
-	rc = nrfx_ppi_channel_assign(timer_capture_ppi, nrf_radio_event_address_get(NRF_RADIO, NRF_RADIO_EVENT_ADDRESS), nrfx_timer_capture_task_address_get(&timer, NRF_TIMER_CC_CHANNEL0));
+	rc = nrfx_ppi_channel_assign(ppi_channels[ 0 ], nrf_radio_event_address_get(NRF_RADIO, NRF_RADIO_EVENT_ADDRESS), nrfx_timer_capture_task_address_get(&timer, NRF_TIMER_CC_CHANNEL0));
 	if (rc != NRFX_SUCCESS) {
 		LOG_ERR("Failed to assign PPI channel");
-		return -1;
+		return -EINVAL;
 	}
 
-	rc = nrfx_ppi_channel_assign(timer_start_ppi, nrf_timer_event_address_get(timer.p_reg, NRF_TIMER_EVENT_COMPARE1), nrf_radio_task_address_get(NRF_RADIO, NRF_RADIO_TASK_START));
+	rc = nrfx_ppi_channel_assign(ppi_channels[ 4 ], nrf_radio_event_address_get(NRF_RADIO, NRF_RADIO_EVENT_READY), nrfx_timer_capture_task_address_get(&timer, NRF_TIMER_CC_CHANNEL0));
 	if (rc != NRFX_SUCCESS) {
 		LOG_ERR("Failed to assign PPI channel");
-		return -1;
+		return -EINVAL;
 	}
 
-	rc = nrfx_ppi_channel_enable(timer_capture_ppi);
+	rc = nrfx_ppi_channel_assign(ppi_channels[ 1 ], nrf_timer_event_address_get(timer.p_reg, NRF_TIMER_EVENT_COMPARE1), nrf_radio_task_address_get(NRF_RADIO, NRF_RADIO_TASK_RXEN));
 	if (rc != NRFX_SUCCESS) {
-		LOG_ERR("Failed to enable PPI channel");
-		return -1;
+		LOG_ERR("Failed to assign PPI channel");
+		return -EINVAL;
 	}
 
-	rc = nrfx_ppi_channel_enable(timer_start_ppi);
+	rc = nrfx_ppi_channel_assign(ppi_channels[ 2 ], nrf_timer_event_address_get(timer.p_reg, NRF_TIMER_EVENT_COMPARE2), nrf_radio_task_address_get(NRF_RADIO, NRF_RADIO_TASK_TXEN));
 	if (rc != NRFX_SUCCESS) {
-		LOG_ERR("Failed to enable PPI channel");
-		return -1;
+		LOG_ERR("Failed to assign PPI channel");
+		return -EINVAL;
 	}
 
+	rc = nrfx_ppi_channel_assign(ppi_channels[ 3 ], nrf_timer_event_address_get(timer.p_reg, NRF_TIMER_EVENT_COMPARE3), nrfx_gpiote_out_task_address_get(OUTPUT_PIN));
+	if (rc != NRFX_SUCCESS) {
+		LOG_ERR("Failed to assign PPI channel");
+		return -EINVAL;
+	}
+
+	for (int i = 0; i < ARRAY_SIZE(ppi_channels); i++) {
+		rc = nrfx_ppi_channel_enable(ppi_channels[ i ]);
+		if (rc != NRFX_SUCCESS) {
+			LOG_ERR("Failed to enable PPI channel");
+			return -EINVAL;
+		}
+	}
+
+	LOG_INF("Radio timer initialized");
 	nrfx_timer_resume(&timer);
+
+	nrfx_timer_compare(&timer, NRF_TIMER_CC_CHANNEL3, 1000000, false);
+
 	return 0;
 }
 
-int radio_timer_schedule_next_start(uint32_t start, uint32_t datum) {
-	static uint32_t last_start = 0;
+uint32_t radio_timer_schedule_next_rx(uint32_t start, uint32_t datum) {
 	uint32_t cmp_value;
-
-	if (datum == 0) {
-		datum = last_start;
-	}
-
 	cmp_value = datum + start;
-
 	nrfx_timer_compare(&timer, NRF_TIMER_CC_CHANNEL1, cmp_value, false);
-	printk("radio_timer_schedule_next_start: %d %d\n", cmp_value, nrfx_timer_capture(&timer, NRF_TIMER_CC_CHANNEL0));
-
-	last_start = cmp_value;
-	return 0;
+	return cmp_value;
 }
-
-ssize_t radio_timer_capture_get() {
+uint32_t radio_timer_schedule_next_tx(uint32_t start, uint32_t datum) {
+	uint32_t cmp_value;
+	cmp_value = datum + start;
+	nrfx_timer_compare(&timer, NRF_TIMER_CC_CHANNEL2, cmp_value, false);
+	return cmp_value;
+}
+uint32_t radio_timer_schedule_next_slot_start(uint32_t start, uint32_t datum) {
+	uint32_t cmp_value;
+	cmp_value = datum + start;
+	nrfx_timer_compare(&timer, NRF_TIMER_CC_CHANNEL3, cmp_value, false);
+	return cmp_value;
 }

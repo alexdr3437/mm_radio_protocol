@@ -13,14 +13,13 @@ LOG_MODULE_REGISTER(mm_radio, LOG_LEVEL_DBG);
 #include "hal/nrf_radio.h"
 
 #include "radio_events.h"
+#include "radio_slot_operation.h"
 #include "radio_timer.h"
 
 enum {
 	RECEIVER,
 	TRANSMITTER,
 };
-
-static uint8_t packet[ 255 ];
 
 int clocks_start(void) {
 	int err;
@@ -95,12 +94,10 @@ static void radio_config() {
 	nrf_radio_txpower_set(NRF_RADIO, RADIO_TXPOWER_TXPOWER_0dBm);
 	nrf_radio_frequency_set(NRF_RADIO, 0);
 
-	nrf_radio_packetptr_set(NRF_RADIO, packet);
+	nrf_radio_shorts_set(NRF_RADIO, NRF_RADIO_SHORT_READY_START_MASK);
 }
 
 ISR_DIRECT_DECLARE(radio_isr) {
-
-	__disable_irq();
 
 	if (nrf_radio_event_check(NRF_RADIO, NRF_RADIO_EVENT_END)) {
 		nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_END);
@@ -137,7 +134,15 @@ ISR_DIRECT_DECLARE(radio_isr) {
 		radio_handle_event(RADIO_EVENT_CRCOK);
 	}
 
-	__enable_irq();
+	if (nrf_radio_event_check(NRF_RADIO, NRF_RADIO_EVENT_TXREADY)) {
+		nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_TXREADY);
+		radio_handle_event(RADIO_EVENT_TXREADY);
+	}
+
+	if (nrf_radio_event_check(NRF_RADIO, NRF_RADIO_EVENT_RXREADY)) {
+		nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_RXREADY);
+		radio_handle_event(RADIO_EVENT_RXREADY);
+	}
 
 	return 0;
 }
@@ -147,55 +152,37 @@ int radio_init() {
 	radio_config();
 	radio_timer_init();
 
-	nrf_radio_int_enable(NRF_RADIO, NRF_RADIO_INT_END_MASK | NRF_RADIO_INT_READY_MASK | NRF_RADIO_INT_ADDRESS_MASK | NRF_RADIO_INT_PAYLOAD_MASK | NRF_RADIO_INT_DISABLED_MASK | NRF_RADIO_INT_CRCERROR_MASK | NRF_RADIO_INT_CRCOK_MASK);
+	nrf_radio_int_enable(NRF_RADIO, NRF_RADIO_INT_END_MASK | NRF_RADIO_INT_READY_MASK | NRF_RADIO_INT_ADDRESS_MASK | NRF_RADIO_INT_PAYLOAD_MASK | NRF_RADIO_INT_DISABLED_MASK | NRF_RADIO_INT_CRCERROR_MASK | NRF_RADIO_INT_CRCOK_MASK | NRF_RADIO_INT_TXREADY_MASK | NRF_RADIO_INT_RXREADY_MASK);
 
 	IRQ_DIRECT_CONNECT(RADIO_IRQn, 0, radio_isr, 0);
 	irq_enable(RADIO_IRQn);
 
-	LOG_DBG("radio state: %d", nrf_radio_state_get(NRF_RADIO));
+	uint8_t node = 1;
 
-	// ppi for ADDRESS event
+	radio_schedule_init(10, 1000);
 
-	uint8_t mode = TRANSMITTER;
+	switch (node) {
+	case 1:
+		radio_schedule_timeslot_add(SLOT_TYPE_RX, 0, 0);
+		radio_schedule_timeslot_add(SLOT_TYPE_TX, 0, 1);
 
-	switch (mode) {
-	case TRANSMITTER:
+		LOG_INF("Starting as node 1");
+		radio_timeslot_print_schedule();
 
-		for (int i = 0; i < 255; i++) {
-			packet[ i ] = i;
-		}
-
-		strncpy(packet, "Hello World!", 12);
-
-		nrf_radio_shorts_set(NRF_RADIO, NRF_RADIO_SHORT_READY_START_MASK);
-		NRF_RADIO->TASKS_TXEN = 1;
-
-		radio_timer_schedule_next_start(5 * 1000000, 0);
-		k_msleep(5000);
-		for (;;) {
-			/* LOG_INF("radio state: %d", nrf_radio_state_get(NRF_RADIO)); */
-			radio_timer_schedule_next_start(1 * 1000000, 0);
-			k_msleep(1000);
-
-		}
+		radio_timeslot_operation_start(false);
 		break;
-	case RECEIVER:
 
-		for (int i = 0; i < 255; i++) {
-			packet[ i ] = 0xaa;
-		}
+	default:
+		radio_schedule_timeslot_add(SLOT_TYPE_TX, 0, 0);
+		radio_schedule_timeslot_add(SLOT_TYPE_RX, 0, 1);
 
-		nrf_radio_dacnf_set(NRF_RADIO, 1, 1);
-		nrf_radio_shorts_set(NRF_RADIO, NRF_RADIO_SHORT_READY_START_MASK | NRF_RADIO_SHORT_END_START_MASK);
-		NRF_RADIO->TASKS_RXEN  = 1;
-		NRF_RADIO->TASKS_START = 1;
-		k_msleep(100);
-		for (;;) {
-			k_msleep(1000);
-			LOG_INF("radio state: %d", nrf_radio_state_get(NRF_RADIO));
-		}
+		LOG_INF("Starting as node 2");
+		radio_timeslot_print_schedule();
+
+		radio_timeslot_operation_start(true);
 		break;
 	}
 
 	return 0;
 }
+SYS_INIT(radio_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);

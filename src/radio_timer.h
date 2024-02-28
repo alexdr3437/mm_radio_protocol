@@ -8,10 +8,15 @@
 extern const nrfx_timer_t timer;
 
 int radio_timer_init(void);
-int radio_timer_schedule_next_start(uint32_t start_time, uint32_t datum);
+uint32_t radio_timer_schedule_next_tx(uint32_t start, uint32_t datum);
+uint32_t radio_timer_schedule_next_rx(uint32_t start, uint32_t datum);
+uint32_t radio_timer_schedule_next_slot_start(uint32_t start, uint32_t datum);
 
-inline uint32_t radio_timer_capture_get() {
-	return nrfx_timer_capture_get(&timer, NRF_TIMER_CC_CHANNEL0);
+static inline uint32_t radio_timer_now() {
+	return nrfx_timer_capture(&timer, 3);
+}
+static inline uint32_t radio_timer_capture_get(uint8_t channel) {
+	return nrfx_timer_capture_get(&timer, channel);
 }
 
 #endif
