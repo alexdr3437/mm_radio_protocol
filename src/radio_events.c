@@ -42,20 +42,7 @@ static void radio_event_ready(uint32_t capture) {
 	LOG_DBG("radio ready %d", radio_timer_capture_get(3));
 }
 
-// clang-format off
-typedef void (*radio_handler_t)(uint32_t capture);
-radio_handler_t radio_handlers[ ] = {
-	[RADIO_EVENT_END] = radio_timeslot_end_event,
-	[RADIO_EVENT_DISABLED] = radio_timeslot_disabled_event, 
-	[RADIO_EVENT_READY] = radio_event_ready,
-	[RADIO_EVENT_ADDRESS] = radio_timeslot_address_event,
-	[RADIO_EVENT_PAYLOAD] = radio_event_payload,
-	[RADIO_EVENT_CRCOK] = radio_timeslot_crcok_event,
-	[RADIO_EVENT_RSSIEND] = radio_timeslot_rssiend_event,
-
-	[RADIO_EVENT_CRCERROR] = NULL,
-};
-// clang-format on
+radio_handler_t radio_handlers[ N_RADIO_EVENTS ] = {0};
 
 static void radio_event(struct k_work *work) {
 	event_work_t *event_work = CONTAINER_OF(work, event_work_t, work);
@@ -68,12 +55,16 @@ static void radio_event(struct k_work *work) {
 	}
 }
 
-void radio_handle_event(radio_event_t event) {
+void radio_event_handle(radio_event_t event) {
 	radio_event_work[ event_work_idx ].timer_capture = radio_timer_capture_get(0);
 	radio_event_work[ event_work_idx ].event		 = event;
 
 	int rc		   = k_work_submit_to_queue(&radio_event_work_q, &radio_event_work[ event_work_idx ].work);
 	event_work_idx = (event_work_idx + 1) % RADIO_EVENT_WORK_Q_SIZE;
+}
+
+void radio_event_register(radio_event_t event, radio_handler_t handler) {
+	radio_handlers[ event ] = handler;
 }
 
 void radio_isr(void *arg) {
@@ -82,52 +73,52 @@ void radio_isr(void *arg) {
 
 	if (nrf_radio_event_check(NRF_RADIO, NRF_RADIO_EVENT_END)) {
 		nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_END);
-		radio_handle_event(RADIO_EVENT_END);
+		radio_event_handle(RADIO_EVENT_END);
 	}
 
 	if (nrf_radio_event_check(NRF_RADIO, NRF_RADIO_EVENT_READY)) {
 		nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_READY);
-		radio_handle_event(RADIO_EVENT_READY);
+		radio_event_handle(RADIO_EVENT_READY);
 	}
 
 	if (nrf_radio_event_check(NRF_RADIO, NRF_RADIO_EVENT_ADDRESS)) {
 		nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_ADDRESS);
-		radio_handle_event(RADIO_EVENT_ADDRESS);
+		radio_event_handle(RADIO_EVENT_ADDRESS);
 	}
 
 	if (nrf_radio_event_check(NRF_RADIO, NRF_RADIO_EVENT_PAYLOAD)) {
 		nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_PAYLOAD);
-		radio_handle_event(RADIO_EVENT_PAYLOAD);
+		radio_event_handle(RADIO_EVENT_PAYLOAD);
 	}
 
 	if (nrf_radio_event_check(NRF_RADIO, NRF_RADIO_EVENT_DISABLED)) {
 		nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_DISABLED);
-		radio_handle_event(RADIO_EVENT_DISABLED);
+		radio_event_handle(RADIO_EVENT_DISABLED);
 	}
 
 	if (nrf_radio_event_check(NRF_RADIO, NRF_RADIO_EVENT_CRCERROR)) {
 		nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_CRCERROR);
-		radio_handle_event(RADIO_EVENT_CRCERROR);
+		radio_event_handle(RADIO_EVENT_CRCERROR);
 	}
 
 	if (nrf_radio_event_check(NRF_RADIO, NRF_RADIO_EVENT_CRCOK)) {
 		nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_CRCOK);
-		radio_handle_event(RADIO_EVENT_CRCOK);
+		radio_event_handle(RADIO_EVENT_CRCOK);
 	}
 
 	if (nrf_radio_event_check(NRF_RADIO, NRF_RADIO_EVENT_TXREADY)) {
 		nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_TXREADY);
-		radio_handle_event(RADIO_EVENT_TXREADY);
+		radio_event_handle(RADIO_EVENT_TXREADY);
 	}
 
 	if (nrf_radio_event_check(NRF_RADIO, NRF_RADIO_EVENT_RXREADY)) {
 		nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_RXREADY);
-		radio_handle_event(RADIO_EVENT_RXREADY);
+		radio_event_handle(RADIO_EVENT_RXREADY);
 	}
 
 	if (nrf_radio_event_check(NRF_RADIO, NRF_RADIO_EVENT_RSSIEND)) {
 		nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_RSSIEND);
-		radio_handle_event(RADIO_EVENT_RSSIEND);
+		radio_event_handle(RADIO_EVENT_RSSIEND);
 	}
 
 	__enable_irq();

@@ -3,6 +3,8 @@
 #ifndef RADIO_TIMER_H__
 #define RADIO_TIMER_H__
 
+#include <stdint.h>
+
 #include <nrfx_timer.h>
 
 extern const nrfx_timer_t timer;

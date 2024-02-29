@@ -4,7 +4,8 @@
 
 #include <stdint.h>
 
-#define RADIO_MAX_PACKET_LEN 255
+#define RADIO_MAX_PACKET_LEN	255
+#define RADIO_PACKET_HEADER_LEN (sizeof(radio_address_t) + sizeof(uint8_t) + sizeof(descriptor_t))
 
 typedef struct {
 	uint8_t val[ 6 ];
@@ -31,7 +32,7 @@ typedef struct {
 	uint8_t length;
 	radio_address_t address;
 	descriptor_t descriptor;
-	uint8_t payload[ RADIO_MAX_PACKET_LEN - sizeof(radio_address_t) - sizeof(uint8_t) - sizeof(descriptor_t) ];
+	uint8_t payload[ RADIO_MAX_PACKET_LEN - RADIO_PACKET_HEADER_LEN ];
 } radio_buffer_t;
 
 void radio_set_address(const radio_address_t *address);

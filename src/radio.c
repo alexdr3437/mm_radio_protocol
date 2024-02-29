@@ -1,3 +1,9 @@
+/*
+ * @Author: alexdr3437 <alexanderdingwall5398@gmail.com>
+ * @Date: 2024-02-29 15:32:50
+ * @Last Modified by: alexdr3437 <alexanderdingwall5398@gmail.com>
+ * @Last Modified time: 2024-02-29 16:10:43
+ */
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(radio, LOG_LEVEL_DBG);
@@ -17,13 +23,16 @@ LOG_MODULE_REGISTER(radio, LOG_LEVEL_DBG);
 #include "mesomat/radio_payload.h"
 #include "mesomat/radio_slot_operation.h"
 #include "mesomat/radio_timer.h"
+#include "mesomat/radio.h"
+
+radio_rx_callback_t rx_callback;
 
 enum {
 	RECEIVER,
 	TRANSMITTER,
 };
 
-int clocks_start(void) {
+static int clocks_start(void) {
 	int err;
 	int res;
 	struct onoff_manager *clk_mgr;
@@ -91,12 +100,16 @@ static void radio_config() {
 	nrf_radio_crc_configure(NRF_RADIO, 2, RADIO_CRCCNF_SKIP_ADDR_Skip, 0x000AA0AA);
 	nrf_radio_crcinit_set(NRF_RADIO, 0x00005050);
 
-	nrf_radio_fast_ramp_up_enable_set(NRF_RADIO, false);
+	/* nrf_radio_fast_ramp_up_enable_set(NRF_RADIO, false); */
 
 	nrf_radio_txpower_set(NRF_RADIO, RADIO_TXPOWER_TXPOWER_0dBm);
 	nrf_radio_frequency_set(NRF_RADIO, 0);
 
 	nrf_radio_shorts_set(NRF_RADIO, NRF_RADIO_SHORT_READY_START_MASK | NRF_RADIO_SHORT_END_DISABLE_MASK | NRF_RADIO_SHORT_ADDRESS_RSSISTART_MASK | NRF_RADIO_SHORT_DISABLED_RSSISTOP_MASK);
+}
+
+void radio_register_rx_callback(radio_rx_callback_t callback) {
+	rx_callback = callback;
 }
 
 int radio_init() {
@@ -105,48 +118,6 @@ int radio_init() {
 	radio_timer_init();
 
 	radio_set_address((radio_address_t *)NRF_FICR->DEVICEADDR);
-
-	uint8_t node = 1;
-
-	radio_descriptor_set_mode(RADIO_MODE_MESH);
-
-	LOG_HEXDUMP_INF(NRF_FICR->DEVICEID, 8, "Device ID");
-	LOG_HEXDUMP_INF(&NRF_FICR->DEVICEADDRTYPE, 4, "Device Addr Type");
-	LOG_HEXDUMP_INF(NRF_FICR->DEVICEADDR, 8, "Device Addr");
-	LOG_HEXDUMP_INF(NRF_FICR->IR, 16, "IR");
-
-	radio_schedule_init(10, 100);
-
-	switch (node) {
-	case 1: {
-		uint8_t data[] = "I am node 1";
-		radio_payload_set(data, sizeof(data));
-
-		radio_descriptor_set_identity(RADIO_IDENTITY_SENSOR);
-		radio_schedule_timeslot_add(SLOT_TYPE_RX, 0, 0);
-		radio_schedule_timeslot_add(SLOT_TYPE_TX, 0, 1);
-
-		LOG_INF("Starting as node 1");
-		radio_timeslot_print_schedule();
-
-		radio_timeslot_operation_start();
-		break;
-	}
-	default: {
-		uint8_t data[] = "I am node 2";
-		radio_payload_set(data, sizeof(data));
-
-		radio_descriptor_set_identity(RADIO_IDENTITY_GATEWAY);
-		radio_schedule_timeslot_add(SLOT_TYPE_TX, 0, 0);
-		radio_schedule_timeslot_add(SLOT_TYPE_RX, 0, 1);
-
-		LOG_INF("Starting as node 2");
-		radio_timeslot_print_schedule();
-
-		radio_timeslot_operation_start();
-		break;
-	}
-	}
 
 	return 0;
 }

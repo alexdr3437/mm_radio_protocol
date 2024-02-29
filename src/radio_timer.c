@@ -1,3 +1,9 @@
+/*
+ * @Author: alexdr3437 <alexanderdingwall5398@gmail.com>
+ * @Date: 2024-02-29 15:33:03
+ * @Last Modified by: alexdr3437 <alexanderdingwall5398@gmail.com>
+ * @Last Modified time: 2024-02-29 15:33:08
+ */
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(radio_timer, LOG_LEVEL_WRN);
@@ -104,11 +110,11 @@ int radio_timer_init(void) {
 		return -EINVAL;
 	}
 
-	rc = nrfx_ppi_channel_assign(ppi_channels[ 3 ], nrf_timer_event_address_get(timer.p_reg, NRF_TIMER_EVENT_COMPARE3), nrfx_gpiote_out_task_address_get(OUTPUT_PIN));
-	if (rc != NRFX_SUCCESS) {
-		LOG_ERR("Failed to assign PPI channel");
-		return -EINVAL;
-	}
+	/* rc = nrfx_ppi_channel_assign(ppi_channels[ 3 ], nrf_timer_event_address_get(timer.p_reg, NRF_TIMER_EVENT_COMPARE3), nrfx_gpiote_out_task_address_get(OUTPUT_PIN)); */
+	/* if (rc != NRFX_SUCCESS) { */
+	/* 	LOG_ERR("Failed to assign PPI channel"); */
+	/* 	return -EINVAL; */
+	/* } */
 
 	for (int i = 0; i < ARRAY_SIZE(ppi_channels); i++) {
 		rc = nrfx_ppi_channel_enable(ppi_channels[ i ]);
