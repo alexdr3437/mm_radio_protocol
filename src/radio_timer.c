@@ -10,7 +10,7 @@ LOG_MODULE_REGISTER(radio_timer, LOG_LEVEL_WRN);
 #include <nrfx_ppi.h>
 #include <nrfx_timer.h>
 
-#include "radio_timer.h"
+#include "mesomat/radio_timer.h"
 
 #define OUTPUT_PIN 14
 

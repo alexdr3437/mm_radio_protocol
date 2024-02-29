@@ -9,10 +9,10 @@ LOG_MODULE_REGISTER(radio_timeslotting, LOG_LEVEL_DBG);
 
 #include <hal/nrf_radio.h>
 
-#include "radio.h"
-#include "radio_payload.h"
-#include "radio_slot_operation.h"
-#include "radio_timer.h"
+#include "mesomat/radio.h"
+#include "mesomat/radio_payload.h"
+#include "mesomat/radio_slot_operation.h"
+#include "mesomat/radio_timer.h"
 
 #define NOMINAL_TX_OFFSET_us 55	  // measured empirically, time between Tx READY and ADDRESS events
 #define MAX_TRANSFER_TIME_us 4508 // measured empirically, amount of time for a maximum length packet to be transmitted, (between Tx READY and END events)

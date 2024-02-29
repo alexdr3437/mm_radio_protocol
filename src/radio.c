@@ -13,10 +13,10 @@ LOG_MODULE_REGISTER(radio, LOG_LEVEL_DBG);
 #include "hal/nrf_ficr.h"
 #include "hal/nrf_radio.h"
 
-#include "radio_events.h"
-#include "radio_payload.h"
-#include "radio_slot_operation.h"
-#include "radio_timer.h"
+#include "mesomat/radio_events.h"
+#include "mesomat/radio_payload.h"
+#include "mesomat/radio_slot_operation.h"
+#include "mesomat/radio_timer.h"
 
 enum {
 	RECEIVER,

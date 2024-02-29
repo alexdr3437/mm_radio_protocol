@@ -6,7 +6,7 @@ LOG_MODULE_REGISTER(radio_payload, LOG_LEVEL_DBG);
 #include <stdint.h>
 #include <string.h>
 
-#include "radio_payload.h"
+#include "mesomat/radio_payload.h"
 
 #define N_RADIO_BUFFERS 5
 
