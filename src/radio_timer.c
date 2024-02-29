@@ -1,6 +1,6 @@
 
 #include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(mm_radio_timer, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(radio_timer, LOG_LEVEL_WRN);
 
 #include <zephyr/kernel.h>
 
@@ -14,7 +14,7 @@ LOG_MODULE_REGISTER(mm_radio_timer, LOG_LEVEL_DBG);
 
 #define OUTPUT_PIN 14
 
-static nrf_ppi_channel_t ppi_channels[ 5 ];
+static nrf_ppi_channel_t ppi_channels[ 6 ];
 
 const nrfx_timer_t timer = {
 	.p_reg			  = NRF_TIMER2,
@@ -81,6 +81,12 @@ int radio_timer_init(void) {
 	}
 
 	rc = nrfx_ppi_channel_assign(ppi_channels[ 4 ], nrf_radio_event_address_get(NRF_RADIO, NRF_RADIO_EVENT_READY), nrfx_timer_capture_task_address_get(&timer, NRF_TIMER_CC_CHANNEL0));
+	if (rc != NRFX_SUCCESS) {
+		LOG_ERR("Failed to assign PPI channel");
+		return -EINVAL;
+	}
+
+	rc = nrfx_ppi_channel_assign(ppi_channels[ 5 ], nrf_radio_event_address_get(NRF_RADIO, NRF_RADIO_EVENT_END), nrfx_timer_capture_task_address_get(&timer, NRF_TIMER_CC_CHANNEL0));
 	if (rc != NRFX_SUCCESS) {
 		LOG_ERR("Failed to assign PPI channel");
 		return -EINVAL;

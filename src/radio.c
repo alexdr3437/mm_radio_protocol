@@ -1,6 +1,6 @@
 
 #include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(mm_radio, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(radio, LOG_LEVEL_DBG);
 
 #include <zephyr/kernel.h>
 
@@ -10,9 +10,11 @@ LOG_MODULE_REGISTER(mm_radio, LOG_LEVEL_DBG);
 
 #include <nrfx.h>
 
+#include "hal/nrf_ficr.h"
 #include "hal/nrf_radio.h"
 
 #include "radio_events.h"
+#include "radio_payload.h"
 #include "radio_slot_operation.h"
 #include "radio_timer.h"
 
@@ -66,12 +68,12 @@ static void radio_config() {
 		.s0len		= 0,							// Length on air of S0 field in number of bytes.
 		.s1len		= 0,							// Length on air of S1 field in number of bits.
 		.s1incl		= RADIO_PCNF0_S1INCL_Automatic, // Include or exclude S1 field in RAM.
-		.cilen		= 0,							// Length of code indicator - long range.
+		.cilen		= 1,							// Length of code indicator - long range.
 		.plen		= RADIO_PCNF0_PLEN_16bit,		// Length of preamble on air. Decision point: TASKS_START task.
 		.crcinc		= false,						// Indicates if LENGTH field contains CRC or not.
-		.termlen	= 0,							// Length of TERM field in Long Range operation.
-		.maxlen		= 60,							// Maximum length of packet payload.
-		.statlen	= 60,							// Static length in number of bytes.
+		.termlen	= 1,							// Length of TERM field in Long Range operation.
+		.maxlen		= 255,							// Maximum length of packet payload.
+		.statlen	= 255,							// Static length in number of bytes.
 		.balen		= 4,							// Base address length in number of bytes.
 		.big_endian = false,						// On air endianness of packet.
 		.whiteen	= true							// Enable or disable packet whitening.
@@ -94,57 +96,7 @@ static void radio_config() {
 	nrf_radio_txpower_set(NRF_RADIO, RADIO_TXPOWER_TXPOWER_0dBm);
 	nrf_radio_frequency_set(NRF_RADIO, 0);
 
-	nrf_radio_shorts_set(NRF_RADIO, NRF_RADIO_SHORT_READY_START_MASK);
-}
-
-ISR_DIRECT_DECLARE(radio_isr) {
-
-	if (nrf_radio_event_check(NRF_RADIO, NRF_RADIO_EVENT_END)) {
-		nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_END);
-		radio_handle_event(RADIO_EVENT_END);
-	}
-
-	if (nrf_radio_event_check(NRF_RADIO, NRF_RADIO_EVENT_READY)) {
-		nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_READY);
-		radio_handle_event(RADIO_EVENT_READY);
-	}
-
-	if (nrf_radio_event_check(NRF_RADIO, NRF_RADIO_EVENT_ADDRESS)) {
-		nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_ADDRESS);
-		radio_handle_event(RADIO_EVENT_ADDRESS);
-	}
-
-	if (nrf_radio_event_check(NRF_RADIO, NRF_RADIO_EVENT_PAYLOAD)) {
-		nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_PAYLOAD);
-		radio_handle_event(RADIO_EVENT_PAYLOAD);
-	}
-
-	if (nrf_radio_event_check(NRF_RADIO, NRF_RADIO_EVENT_DISABLED)) {
-		nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_DISABLED);
-		radio_handle_event(RADIO_EVENT_DISABLED);
-	}
-
-	if (nrf_radio_event_check(NRF_RADIO, NRF_RADIO_EVENT_CRCERROR)) {
-		nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_CRCERROR);
-		radio_handle_event(RADIO_EVENT_CRCERROR);
-	}
-
-	if (nrf_radio_event_check(NRF_RADIO, NRF_RADIO_EVENT_CRCOK)) {
-		nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_CRCOK);
-		radio_handle_event(RADIO_EVENT_CRCOK);
-	}
-
-	if (nrf_radio_event_check(NRF_RADIO, NRF_RADIO_EVENT_TXREADY)) {
-		nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_TXREADY);
-		radio_handle_event(RADIO_EVENT_TXREADY);
-	}
-
-	if (nrf_radio_event_check(NRF_RADIO, NRF_RADIO_EVENT_RXREADY)) {
-		nrf_radio_event_clear(NRF_RADIO, NRF_RADIO_EVENT_RXREADY);
-		radio_handle_event(RADIO_EVENT_RXREADY);
-	}
-
-	return 0;
+	nrf_radio_shorts_set(NRF_RADIO, NRF_RADIO_SHORT_READY_START_MASK | NRF_RADIO_SHORT_END_DISABLE_MASK | NRF_RADIO_SHORT_ADDRESS_RSSISTART_MASK | NRF_RADIO_SHORT_DISABLED_RSSISTOP_MASK);
 }
 
 int radio_init() {
@@ -152,35 +104,48 @@ int radio_init() {
 	radio_config();
 	radio_timer_init();
 
-	nrf_radio_int_enable(NRF_RADIO, NRF_RADIO_INT_END_MASK | NRF_RADIO_INT_READY_MASK | NRF_RADIO_INT_ADDRESS_MASK | NRF_RADIO_INT_PAYLOAD_MASK | NRF_RADIO_INT_DISABLED_MASK | NRF_RADIO_INT_CRCERROR_MASK | NRF_RADIO_INT_CRCOK_MASK | NRF_RADIO_INT_TXREADY_MASK | NRF_RADIO_INT_RXREADY_MASK);
-
-	IRQ_DIRECT_CONNECT(RADIO_IRQn, 0, radio_isr, 0);
-	irq_enable(RADIO_IRQn);
+	radio_set_address((radio_address_t *)NRF_FICR->DEVICEADDR);
 
 	uint8_t node = 1;
 
-	radio_schedule_init(10, 1000);
+	radio_descriptor_set_mode(RADIO_MODE_MESH);
+
+	LOG_HEXDUMP_INF(NRF_FICR->DEVICEID, 8, "Device ID");
+	LOG_HEXDUMP_INF(&NRF_FICR->DEVICEADDRTYPE, 4, "Device Addr Type");
+	LOG_HEXDUMP_INF(NRF_FICR->DEVICEADDR, 8, "Device Addr");
+	LOG_HEXDUMP_INF(NRF_FICR->IR, 16, "IR");
+
+	radio_schedule_init(10, 100);
 
 	switch (node) {
-	case 1:
+	case 1: {
+		uint8_t data[] = "I am node 1";
+		radio_payload_set(data, sizeof(data));
+
+		radio_descriptor_set_identity(RADIO_IDENTITY_SENSOR);
 		radio_schedule_timeslot_add(SLOT_TYPE_RX, 0, 0);
 		radio_schedule_timeslot_add(SLOT_TYPE_TX, 0, 1);
 
 		LOG_INF("Starting as node 1");
 		radio_timeslot_print_schedule();
 
-		radio_timeslot_operation_start(false);
+		radio_timeslot_operation_start();
 		break;
+	}
+	default: {
+		uint8_t data[] = "I am node 2";
+		radio_payload_set(data, sizeof(data));
 
-	default:
+		radio_descriptor_set_identity(RADIO_IDENTITY_GATEWAY);
 		radio_schedule_timeslot_add(SLOT_TYPE_TX, 0, 0);
 		radio_schedule_timeslot_add(SLOT_TYPE_RX, 0, 1);
 
 		LOG_INF("Starting as node 2");
 		radio_timeslot_print_schedule();
 
-		radio_timeslot_operation_start(true);
+		radio_timeslot_operation_start();
 		break;
+	}
 	}
 
 	return 0;

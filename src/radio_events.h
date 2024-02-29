@@ -14,6 +14,7 @@ typedef enum {
 	RADIO_EVENT_CRCERROR,
 	RADIO_EVENT_CRCOK,
 	RADIO_EVENT_PHYEND,
+	RADIO_EVENT_RSSIEND,
 } radio_event_t;
 
 void radio_handle_event(radio_event_t event);

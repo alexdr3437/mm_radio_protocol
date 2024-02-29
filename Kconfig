@@ -1,0 +1,12 @@
+
+menuconfig MM_RADIO
+	bool "Mesomat Radio"
+	depends on !BT
+	depends on !MPSL
+	help
+	  Enable the custom mesomat radio protocol.
+
+if MM_RADIO
+
+	
+endif # MM_RADIO
